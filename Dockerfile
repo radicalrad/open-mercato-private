@@ -194,8 +194,10 @@ RUN chmod +x /app/docker/scripts/init-or-migrate.sh
 RUN mkdir -p /app/apps/mercato/storage
 
 # Create non-root user and grant passwordless sudo for chown only
+# Fix permissions for directories that need to be writable at runtime
+# The app needs write access to generate files during initialization
 RUN adduser -D -u 1001 omuser \
- && chown -R omuser:omuser /app/apps/mercato/storage \
+ && chown -R omuser:omuser /app \
  && echo "omuser ALL=(root) NOPASSWD: /bin/chown" > /etc/sudoers.d/omuser \
  && chmod 0440 /etc/sudoers.d/omuser
 
@@ -204,4 +206,6 @@ USER omuser
 EXPOSE ${CONTAINER_PORT}
 
 WORKDIR /app/apps/mercato
-CMD ["yarn", "start"]
+
+# Use the entrypoint script to initialize the database and start the app
+CMD ["/bin/sh", "/app/docker/scripts/railway-entrypoint.sh"]

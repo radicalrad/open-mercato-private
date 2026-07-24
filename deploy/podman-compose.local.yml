@@ -1,10 +1,7 @@
-# Open Mercato - Production Podman Compose
-# Usage: podman-compose -f deploy/podman-compose.prod.yml up -d
+# Open Mercato - Local Development with Podman
+# Usage: podman-compose -f podman-compose.local.yml up -d
 #
-# Required environment variables (set in .env or export before running):
-#   POSTGRES_USER, POSTGRES_PASSWORD, SESSION_SECRET
-#   IMAGE_TAG (set by CI, defaults to 'latest')
-#   GHCR_ORG (GitHub Container Registry org, defaults to 'radicalrad')
+# This file uses local images instead of GHCR
 
 version: "3.8"
 
@@ -18,7 +15,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -68,7 +64,7 @@ services:
       - internal
 
   app:
-    image: ghcr.io/${GHCR_ORG:-radicalrad}/open-mercato-app:${IMAGE_TAG:-latest}
+    image: localhost/open-mercato-app:${IMAGE_TAG:-latest}
     container_name: open-mercato-app
     environment:
       NODE_ENV: production
@@ -78,8 +74,6 @@ services:
       MEILISEARCH_HOST: http://meilisearch:7700
       MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
-      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
-      NEW_RELIC_APP_NAME: ${NEW_RELIC_APP_NAME:-open-mercato-production}
     depends_on:
       postgres:
         condition: service_healthy
