@@ -23,7 +23,7 @@ cd open-mercato-private
 # Copy environment template
 cp deploy/env/.env.production.template .env
 
-# Edit .env with your values
+# Edit .env with your values (JWT_SECRET is required for auth to work)
 nano .env
 ```
 
