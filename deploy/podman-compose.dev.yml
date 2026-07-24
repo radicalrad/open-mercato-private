@@ -104,8 +104,8 @@ services:
       NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=3072}
       DEPLOY_ENV: local
       PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@om-postgres-dev:5432/${POSTGRES_DB:-open-mercato}
-      JWT_SECRET: ${JWT_SECRET:-JWT}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@om-postgres-dev:5432/${POSTGRES_DB:-open-mercato}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required in .env}
       APP_URL: ${APP_URL:-http://localhost:3000}
       APP_ALLOWED_ORIGINS: ${APP_ALLOWED_ORIGINS:-}
       CACHE_REDIS_URL: redis://om-redis-dev:6379
@@ -129,8 +129,8 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      OM_INIT_SUPERADMIN_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL:-}
-      OM_INIT_SUPERADMIN_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD:-password}
+      OM_INIT_SUPERADMIN_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL:-superadmin@acme.com}
+      OM_INIT_SUPERADMIN_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD:?OM_INIT_SUPERADMIN_PASSWORD is required in .env}
       TENANT_DATA_ENCRYPTION_KEY: ${TENANT_DATA_ENCRYPTION_KEY:-}
     depends_on:
       - postgres

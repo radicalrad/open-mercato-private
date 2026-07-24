@@ -71,7 +71,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
-      DATABASE_URL: postgresql://${POSTGRES_USER:***@postgres:5432/open_mercato
+      DATABASE_URL: postgresql://${POSTGRES_USER:-open_mercato}:${POSTGRES_PASSWORD}@postgres:5432/open_mercato
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       REDIS_URL: redis://redis:6379
       MEILISEARCH_HOST: http://meilisearch:7700
