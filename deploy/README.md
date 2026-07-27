@@ -204,6 +204,8 @@ DATABASE_URL: postgresql://${POSTGRES_USER:-open_mercato}:${POSTGRES_PASSWORD}@p
 
 If you see `***` literally in the env inside the container, you are running an older compose file — re-pull with `podman-compose -f deploy/podman-compose.prod.yml pull && podman-compose -f deploy/podman-compose.prod.yml up -d`.
 
+> **Note on display redaction.** Some terminal / IDE display layers (notably the Hermes agent's `read_file` and `grep`/`sed` output) redact the YAML default-value string `-open_mercato` as `***`. If you copy-paste a `DATABASE_URL:` line that *visually* contains `***` but you want to confirm whether the file is actually broken, run `od -c deploy/podman-compose.prod.yml | grep -A1 DATABASE_URL` and inspect the raw bytes — the correct file will show `D   A   T   A   B   A   S   E   _   U   R   L   :       p   o   s   t   g   r   e   s   q   l   :   /   /   $   {   P   O   S   T   G   R   E   S   _   U   S   E   R   :   -   o   p   e   n   _   m   e   r   c   a   t   o   }` and the broken file will show `:   *   *   *` at the same offset. This bit the DARAA-34 investigation in July 2026 — see `.ai/runs/daraa-34/evidence.txt` for the byte-level proof.
+
 ### Health Check Failures
 
 ```bash
