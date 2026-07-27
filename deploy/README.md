@@ -23,9 +23,21 @@ cd open-mercato-private
 # Copy environment template
 cp deploy/env/.env.production.template .env
 
-# Edit .env with your values (JWT_SECRET is required for auth to work)
+# Generate strong secrets and fill the placeholders in .env
+openssl rand -hex 32   # SESSION_SECRET
+openssl rand -hex 32   # JWT_SECRET
+openssl rand -hex 32   # MEILISEARCH_MASTER_KEY
+openssl rand -base64 24   # OM_INIT_SUPERADMIN_PASSWORD
+# Replace each <GENERATE_*> placeholder in .env with one of the above.
+
+# Edit .env with your values
 nano .env
 ```
+
+**Required variables in .env for `podman-compose.prod.yml`:**
+`POSTGRES_PASSWORD`, `MEILISEARCH_MASTER_KEY`, `SESSION_SECRET`, `JWT_SECRET`, `OM_INIT_SUPERADMIN_PASSWORD`.
+
+If any of these is missing, `podman-compose up` will fail with a clear error like `variable is required`. This is intentional — no default credentials.
 
 ### 2. First Deployment
 
@@ -42,6 +54,12 @@ podman-compose -f deploy/podman-compose.prod.yml ps
 # View logs
 podman-compose -f deploy/podman-compose.prod.yml logs -f app
 ```
+
+**Default superadmin credentials** (set during first run from `OM_INIT_SUPERADMIN_EMAIL` / `OM_INIT_SUPERADMIN_PASSWORD`):
+- Email: `superadmin@acme.com` (override via `OM_INIT_SUPERADMIN_EMAIL`)
+- Password: the value of `OM_INIT_SUPERADMIN_PASSWORD` in `.env`
+
+Log in at <http://localhost:3000>, then change the password from the admin UI and remove `OM_INIT_SUPERADMIN_*` from `.env` for subsequent restarts.
 
 ### 3. Verify Deployment
 
@@ -173,7 +191,20 @@ podman exec open-mercato-postgres pg_isready
 
 # Check connection from app
 podman exec open-mercato-app curl -f http://postgres:5432
+
+# Print the resolved DATABASE_URL the app container sees
+podman exec open-mercato-app env | grep DATABASE_URL
 ```
+
+**`DATABASE_URL` looks wrong / has `***` in it:** the placeholder in `.env` was not replaced, or the compose file's `DATABASE_URL` line is malformed. The expected pattern is:
+
+```yaml
+DATABASE_URL: postgresql://${POSTGRES_USER:-open_mercato}:${POSTGRES_PASSWORD}@postgres:5432/open_mercato
+```
+
+If you see `***` literally in the env inside the container, you are running an older compose file — re-pull with `podman-compose -f deploy/podman-compose.prod.yml pull && podman-compose -f deploy/podman-compose.prod.yml up -d`.
+
+> **Note on display redaction.** Some terminal / IDE display layers (notably the Hermes agent's `read_file` and `grep`/`sed` output) redact the YAML default-value string `-open_mercato` as `***`. If you copy-paste a `DATABASE_URL:` line that *visually* contains `***` but you want to confirm whether the file is actually broken, run `od -c deploy/podman-compose.prod.yml | grep -A1 DATABASE_URL` and inspect the raw bytes — the correct file will show `D   A   T   A   B   A   S   E   _   U   R   L   :       p   o   s   t   g   r   e   s   q   l   :   /   /   $   {   P   O   S   T   G   R   E   S   _   U   S   E   R   :   -   o   p   e   n   _   m   e   r   c   a   t   o   }` and the broken file will show `:   *   *   *` at the same offset. This bit the DARAA-34 investigation in July 2026 — see `.ai/runs/daraa-34/evidence.txt` for the byte-level proof.
 
 ### Health Check Failures
 
@@ -187,6 +218,10 @@ podman-compose -f deploy/podman-compose.prod.yml ps
 # Manually test health endpoint
 curl -v http://localhost:3000/api/health
 ```
+
+**Compose refuses to start with "variable is required":** one of the required secrets is missing from `.env`. See the `Required variables in .env` list in step 1 above. The most common culprit is `OM_INIT_SUPERADMIN_PASSWORD` after a fresh clone.
+
+**Cannot log in with `superadmin@acme.com` after a fresh deploy:** the `OM_INIT_SUPERADMIN_*` env vars were not set on first run, so no superadmin was created. Set them in `.env`, then run `podman-compose -f deploy/podman-compose.prod.yml up -d --force-recreate app`. Re-creating only the `app` service after a clean database will trigger the init path.
 
 ## Security Notes
 
