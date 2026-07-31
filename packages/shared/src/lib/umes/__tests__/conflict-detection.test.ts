@@ -5,6 +5,7 @@ import {
   detectInterceptorConflicts,
   detectCircularWidgetDependencies,
   detectMissingFeatureDeclarations,
+  detectUnmatchedInterceptorTargets,
 } from '../conflict-detection'
 
 describe('detectComponentOverrideConflicts', () => {
@@ -125,5 +126,69 @@ describe('detectConflicts (integration)', () => {
 
     expect(result.errors).toHaveLength(1)
     expect(result.warnings).toHaveLength(2)
+  })
+})
+
+describe('detectUnmatchedInterceptorTargets (DARAA-100 remedy 2)', () => {
+  const served = ['nemo-assets/verify', 'nemo-assets', 'auth/login']
+
+  it('warns when a targetRoute matches no served route', () => {
+    const result = detectUnmatchedInterceptorTargets(
+      [{ moduleId: 'nemo_asset', id: 'a.typo', targetRoute: 'nemo-asset/verify', methods: ['POST'], priority: 0 }],
+      served,
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0].severity).toBe('warning')
+    expect(result[0].type).toBe('unmatched-interceptor-target')
+    expect(result[0].message).toContain('never execute')
+  })
+
+  it('accepts an exact match', () => {
+    const result = detectUnmatchedInterceptorTargets(
+      [{ moduleId: 'nemo_asset', id: 'a.ok', targetRoute: 'nemo-assets/verify', methods: ['POST'], priority: 0 }],
+      served,
+    )
+    expect(result).toHaveLength(0)
+  })
+
+  it('accepts a wildcard prefix match and a global wildcard', () => {
+    const result = detectUnmatchedInterceptorTargets(
+      [
+        { moduleId: 'm', id: 'a.prefix', targetRoute: 'nemo-assets/*', methods: ['POST'], priority: 0 },
+        { moduleId: 'm', id: 'a.global', targetRoute: '*', methods: ['POST'], priority: 0 },
+      ],
+      served,
+    )
+    expect(result).toHaveLength(0)
+  })
+
+  it('tolerates a leading /api prefix on either side', () => {
+    const result = detectUnmatchedInterceptorTargets(
+      [{ moduleId: 'm', id: 'a.api', targetRoute: '/api/auth/login', methods: ['POST'], priority: 0 }],
+      served,
+    )
+    expect(result).toHaveLength(0)
+  })
+
+  it('skips the check when no served routes were discovered', () => {
+    const result = detectUnmatchedInterceptorTargets(
+      [{ moduleId: 'm', id: 'a.any', targetRoute: 'whatever', methods: ['POST'], priority: 0 }],
+      [],
+    )
+    expect(result).toHaveLength(0)
+  })
+
+  it('is wired into detectConflicts only when servedApiRoutePaths is supplied', () => {
+    const interceptors = [
+      { moduleId: 'm', id: 'a.typo', targetRoute: 'does/not/exist', methods: ['POST'], priority: 0 },
+    ]
+    expect(
+      detectConflicts({ interceptors }).warnings.filter((w) => w.type === 'unmatched-interceptor-target'),
+    ).toHaveLength(0)
+    expect(
+      detectConflicts({ interceptors, servedApiRoutePaths: served }).warnings.filter(
+        (w) => w.type === 'unmatched-interceptor-target',
+      ),
+    ).toHaveLength(1)
   })
 })

@@ -13,6 +13,7 @@ import { rateLimitErrorSchema } from '@open-mercato/shared/lib/ratelimit/helpers
 import { readEndpointRateLimitConfig } from '@open-mercato/shared/lib/ratelimit/config'
 import { checkAuthRateLimit, resetAuthRateLimit } from '@open-mercato/core/modules/auth/lib/rateLimitCheck'
 import { runCustomRouteAfterInterceptors } from '@open-mercato/shared/lib/crud/custom-route-interceptor'
+import { markHandlerRunsApiInterceptors } from '@open-mercato/shared/lib/crud/dispatcher-interceptors'
 import { sanitizeRedirectPath } from '@open-mercato/core/modules/auth/lib/safeRedirect'
 import { getAppBaseUrl } from '@open-mercato/shared/lib/url'
 
@@ -259,6 +260,11 @@ const loginMethodDoc: OpenApiMethodDoc = {
     { status: 429, description: 'Too many login attempts', schema: rateLimitErrorSchema },
   ],
 }
+
+// The login route drives the API interceptor chain itself (see the
+// `runCustomRouteAfterInterceptors` call in POST above), so the app dispatcher must
+// not run it a second time (DARAA-100).
+markHandlerRunsApiInterceptors(POST)
 
 export const openApi: OpenApiRouteDoc = {
   summary: 'Authenticate user credentials',

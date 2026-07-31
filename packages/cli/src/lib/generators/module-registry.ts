@@ -109,6 +109,8 @@ type ApiRouteGenerationResult = {
   eagerApis: string[]
   runtimeApis: string[]
   manifestApis: string[]
+  /** `/api`-relative route paths served by this module; used by the interceptor targetRoute guard. */
+  routePaths: string[]
 }
 
 type SerializablePageMetadata = {
@@ -1721,12 +1723,13 @@ async function processApiRoutes(options: {
   const apiApp = path.join(roots.appBase, 'api')
   const apiPkg = path.join(roots.pkgBase, 'api')
   if (!fs.existsSync(apiApp) && !fs.existsSync(apiPkg)) {
-    return { eagerApis: [], runtimeApis: [], manifestApis: [] }
+    return { eagerApis: [], runtimeApis: [], manifestApis: [], routePaths: [] }
   }
 
   const eagerApis: string[] = []
   const runtimeApis: string[] = []
   const manifestApis: string[] = []
+  const routePaths: string[] = []
 
   // route.* aggregations
   const routeFiles = scanModuleDir(roots, SCAN_CONFIGS.apiRoutes)
@@ -1757,6 +1760,7 @@ async function processApiRoutes(options: {
     eagerImports.push(buildImportStatement(`* as ${importName}`, importPath))
     eagerApis.push(`{ path: ((${importName} as any).metadata?.path ?? ${toLiteral(routePath)}), metadata: (${importName} as any).metadata, handlers: ${importName} as any${docsPart} }`)
     runtimeApis.push(`{ path: ${toLiteral(resolvedPath)}, metadata: ${metadataLiteral}, handlers: { ${exportedMethods.map((method) => `${method}: async (req: Request, ctx?: any) => { const mod = await ${buildDynamicImportExpression(importPath)}; return (mod as any).${method}(req, ctx) }`).join(', ')} } }`)
+    routePaths.push(resolvedPath)
     manifestApis.push(`{ moduleId: ${toLiteral(modId)}, kind: ${toLiteral('route-file')}, path: ${toLiteral(resolvedPath)}, methods: [${exportedMethods.map((method) => toLiteral(method)).join(', ')}], load: async () => ${buildDynamicImportExpression(importPath)} }`)
   }
 
@@ -1789,6 +1793,7 @@ async function processApiRoutes(options: {
     eagerImports.push(buildImportStatement(`* as ${importName}`, importPath))
     eagerApis.push(`{ path: ((${importName} as any).metadata?.path ?? ${toLiteral(routePath)}), metadata: (${importName} as any).metadata, handlers: ${importName} as any${docsPart} }`)
     runtimeApis.push(`{ path: ${toLiteral(resolvedPath)}, metadata: ${metadataLiteral}, handlers: { ${exportedMethods.map((entryMethod) => `${entryMethod}: async (req: Request, ctx?: any) => { const mod = await ${buildDynamicImportExpression(importPath)}; return (mod as any).${entryMethod}(req, ctx) }`).join(', ')} } }`)
+    routePaths.push(resolvedPath)
     manifestApis.push(`{ moduleId: ${toLiteral(modId)}, kind: ${toLiteral('route-file')}, path: ${toLiteral(resolvedPath)}, methods: [${exportedMethods.map((entryMethod) => toLiteral(entryMethod)).join(', ')}], load: async () => ${buildDynamicImportExpression(importPath)} }`)
   }
 
@@ -1831,6 +1836,7 @@ async function processApiRoutes(options: {
       eagerImports.push(buildImportStatement(`${importName}, * as ${metaName}`, importPath))
       eagerApis.push(`{ method: ${toLiteral(method)}, path: (${metaName}.metadata?.path ?? ${toLiteral(routePath)}), handler: ${importName}, metadata: ${metaName}.metadata${docsPart} }`)
       runtimeApis.push(`{ method: ${toLiteral(method)}, path: ${toLiteral(resolvedPath)}, handler: async (req: Request, ctx?: any) => { const mod = await ${buildDynamicImportExpression(importPath)}; const handler = ((mod as any).default ?? (mod as any).${method} ?? (mod as any).handler) as any; return handler(req, ctx) }, metadata: ${metadataLiteral} }`)
+      routePaths.push(resolvedPath)
       manifestApis.push(`{ moduleId: ${toLiteral(modId)}, kind: ${toLiteral('legacy')}, method: ${toLiteral(method)}, path: ${toLiteral(resolvedPath)}, methods: [${toLiteral(method)}], load: async () => ${buildDynamicImportExpression(importPath)} }`)
     }
   }
@@ -1839,6 +1845,7 @@ async function processApiRoutes(options: {
     eagerApis,
     runtimeApis,
     manifestApis,
+    routePaths,
   }
 }
 
@@ -2797,6 +2804,9 @@ export async function generateModuleRegistry(options: ModuleRegistryOptions): Pr
   const frontendRouteManifestDecls: string[] = []
   const backendRouteManifestDecls: string[] = []
   const apiRouteManifestDecls: string[] = []
+  // Every `/api`-relative route path served by any module, used by the interceptor
+  // targetRoute guard below (DARAA-100 remedy 2).
+  const servedApiRoutePaths: string[] = []
   // Mutable ref so extracted helper functions can increment the shared counter
   const importIdRef = { value: 0 }
   const trackedRoots = new Set<string>()
@@ -3021,6 +3031,7 @@ export async function generateModuleRegistry(options: ModuleRegistryOptions): Pr
       apis.push(...generatedApis.eagerApis)
       runtimeApis.push(...generatedApis.runtimeApis)
       apiRouteManifestDecls.push(...generatedApis.manifestApis)
+      servedApiRoutePaths.push(...generatedApis.routePaths)
     }
 
     // 15. CLI
@@ -3209,6 +3220,7 @@ export async function generateModuleRegistry(options: ModuleRegistryOptions): Pr
       interceptors: interceptorInputs,
       gatedExtensions,
       declaredFeatures,
+      servedApiRoutePaths,
     })
 
     for (const warning of conflictResult.warnings) {
