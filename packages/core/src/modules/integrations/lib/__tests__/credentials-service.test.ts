@@ -195,6 +195,44 @@ describe('integration credentials service encryption', () => {
     )
     expect(source).not.toContain('om-emergency-fallback-rotate-me')
   })
+
+  it('save re-encrypts an existing row without lifecycle drift (map enrollment + update path)', async () => {
+    const dek = generateDek()
+    mockKms(dek)
+    const existingRow = {
+      integrationId: 'gateway_test',
+      credentials: { apiKey: 'prior-key' }, // legacy plaintext — read path returns as-is
+      organizationId: 'org-1',
+      tenantId: 'tenant-1',
+      userId: null,
+      updatedAt: new Date(),
+    }
+    mockFindOneWithDecryption.mockImplementation(async (_em, entity) => {
+      if (entity === IntegrationCredentials) return existingRow
+      if (entity === EncryptionMap) return null
+      return null
+    })
+    const { em, persisted } = createMockEntityManager()
+    const service = createCredentialsService(em as never)
+
+    await service.save('gateway_test', { apiKey: 'rotated-key' }, scope)
+
+    // Update path re-encrypts in place on the loaded row (never a second row).
+    const rowCredentials = existingRow.credentials as Record<string, unknown>
+    expect(rowCredentials[encryptedBlobKey]).toEqual(expect.any(String))
+    expect(rowCredentials.apiKey).toBeUndefined()
+    const decrypted = decryptWithAesGcm(String(rowCredentials[encryptedBlobKey]), dek)
+    expect(JSON.parse(String(decrypted))).toEqual({ apiKey: 'rotated-key' })
+
+    // The runtime enrollment upsert matches the declarative enrollment in encryption.ts —
+    // guard that the entityId never drifts apart between the two call sites.
+    const encryptionMap = persisted.find(
+      (row) => typeof row === 'object' && row !== null && (row as { entityId?: unknown }).entityId === 'integrations:integration_credentials',
+    ) as { entityId?: string; fieldsJson?: unknown; isActive?: boolean } | undefined
+    expect(encryptionMap).toBeDefined()
+    expect(encryptionMap?.fieldsJson).toEqual([{ field: 'credentials' }])
+    expect(encryptionMap?.isActive).toBe(true)
+  })
 })
 
 /**
