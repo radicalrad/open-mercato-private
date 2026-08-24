@@ -136,6 +136,9 @@ export const enabledModules: ModuleEntry[] = [
   },
   { id: 'ratelimit_probe', from: '@app' },
   { id: 'browser_debug', from: '@app' },
+  // Control-plane rate limiting beyond auth (AUT-92) — interceptor overlay module.
+  // Contributes api/interceptors.ts to the generated registry; no UI.
+  { id: 'rate_limiting', from: '@open-mercato/core' },
 ]
 
 // Official modules activated via official-modules.json / official-modules.local.json
