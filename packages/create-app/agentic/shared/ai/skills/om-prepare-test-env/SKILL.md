@@ -86,8 +86,12 @@ Stop the CLI owner process (`test:ephemeral`) and the app process bound to the r
 then delete `.ai/qa/ephemeral-env.json`. If a `mercato server start` wrapper survives, stop it
 and clear `.mercato/server-start.lock` — a surviving wrapper keeps the single-instance guard
 locked and the next boot dies with "Another Open Mercato production server is already running".
-The ephemeral Postgres containers are testcontainers-managed; ryuk reaps them once their owner
-is gone — never remove containers this app did not create.
+The ephemeral Postgres containers are testcontainers-managed but **ryuk is disabled by
+default** in this repo (`TESTCONTAINERS_RYUK_DISABLED=true` is set automatically by the
+`mercato test:ephemeral` runner in `packages/cli/src/lib/testing/integration.ts`) because the
+ryuk reaper is incompatible with the Podman machine socket layout on this environment and
+hangs container startup. The owner process performs explicit teardown — remove only
+containers this app created, never containers belonging to other work.
 
 ## Descriptor
 
