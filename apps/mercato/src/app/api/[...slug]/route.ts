@@ -17,6 +17,7 @@ import { checkRateLimit, getClientIp, RATE_LIMIT_ERROR_KEY, RATE_LIMIT_ERROR_FAL
 import { getGlobalEventBus } from '@open-mercato/shared/modules/events'
 import { applicationLifecycleEvents, type ApplicationLifecycleEventId } from '@open-mercato/shared/lib/runtime/events'
 import { withModuleResourceUsage } from '@open-mercato/shared/lib/modules/resource-usage'
+import { normalizeDispatcherRoutePath, withDispatcherApiInterceptors } from '@open-mercato/shared/lib/crud/dispatcher-interceptors'
 
 // Ensure all package registrations are initialized for API routes.
 bootstrap()
@@ -437,7 +438,21 @@ async function handleRequest(
 
   try {
     const handlerContext: HandlerContext = { params: match.params, auth }
-    const runHandler = () => runWithCacheTenant(auth?.tenantId ?? null, () => handler(req, handlerContext))
+    // Run the registered API interceptor chain around EVERY module route, not just
+    // routes built with `makeCrudRoute` (DARAA-100). Handlers that drive the chain
+    // themselves are marked self-managed and are skipped here, so the chain never
+    // runs twice. Routes with no matching interceptor short-circuit immediately.
+    const invokeHandler = (request: NextRequest) =>
+      runWithCacheTenant(auth?.tenantId ?? null, () => handler(request, handlerContext))
+    const runHandler = () => withDispatcherApiInterceptors({
+      routePath: normalizeDispatcherRoutePath(pathname),
+      method,
+      request: req,
+      handler,
+      auth,
+      resolveContainer: createRequestContainer,
+      run: (request: Request) => Promise.resolve(invokeHandler(request as NextRequest)),
+    })
     const response = methodMetadata?.skipModuleResourceUsageTracking !== true
       ? await withModuleResourceUsage(
         {

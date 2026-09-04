@@ -3209,6 +3209,14 @@ async function promptAfterRun(
 export async function startEphemeralEnvironment(options: EphemeralRuntimeOptions): Promise<EphemeralEnvironmentHandle> {
   assertNode24Runtime()
 
+  // Ryuk (the testcontainers reaper) is incompatible with the Podman machine socket
+  // layout on this environment: it cannot reach the daemon through the socket symlink,
+  // exits silently, and hangs container startup. It provides no value for ephemeral
+  // envs whose owner process performs explicit teardown, so it is force-disabled here.
+  if (process.env.TESTCONTAINERS_RYUK_DISABLED === undefined && process.env.TESTCONTAINERS_RYUK_DISABLED_DEFAULT !== 'false') {
+    process.env.TESTCONTAINERS_RYUK_DISABLED = 'true'
+  }
+
   // Auto-detect Docker socket from active context for non-standard setups (e.g., Colima)
   const dockerConfig = await resolveDockerHostFromContext(options.logPrefix)
   if (dockerConfig) {

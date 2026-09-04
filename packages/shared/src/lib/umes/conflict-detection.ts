@@ -29,10 +29,71 @@ export interface GatedExtensionInput {
 
 export interface ConflictDetectionInput {
   componentOverrides?: ComponentOverrideInput[]
-  interceptors?: InterceptorInput[]
   injectionTables?: InjectionTableInput[]
+  interceptors?: InterceptorInput[]
   gatedExtensions?: GatedExtensionInput[]
   declaredFeatures?: Set<string>
+  /**
+   * Every `/api`-relative route path served by an enabled module. When supplied,
+   * interceptor `targetRoute` values are validated against it so a typo'd or stale
+   * target is reported at build time instead of silently never matching
+   * (DARAA-100 remedy 2). Omit to skip the check.
+   */
+  servedApiRoutePaths?: string[]
+}
+
+/** Mirrors `routeMatches` in `lib/crud/interceptor-registry`. */
+function interceptorTargetMatches(targetRoute: string, routePath: string): boolean {
+  if (targetRoute === '*') return true
+  if (targetRoute.endsWith('/*')) {
+    const prefix = targetRoute.slice(0, -2)
+    return routePath === prefix || routePath.startsWith(`${prefix}/`)
+  }
+  return targetRoute === routePath
+}
+
+function normalizeServedRoutePath(routePath: string): string {
+  const trimmed = routePath.trim()
+  const withoutApi = trimmed.startsWith('/api/')
+    ? trimmed.slice(5)
+    : trimmed === '/api'
+      ? ''
+      : trimmed
+  return withoutApi.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+/**
+ * Warn when an interceptor's `targetRoute` does not resolve to any route served by
+ * an enabled module. Such an interceptor looks active in the registry and passes
+ * unit tests, but can never execute at runtime — the misconfiguration half of the
+ * DARAA-100 fail-open class. Warning (not error) so a module targeting a route from
+ * an optional/disabled peer module does not break the build.
+ */
+export function detectUnmatchedInterceptorTargets(
+  interceptors: InterceptorInput[],
+  servedApiRoutePaths: string[],
+): UmesConflict[] {
+  const conflicts: UmesConflict[] = []
+  const served = servedApiRoutePaths.map(normalizeServedRoutePath).filter((entry) => entry.length > 0)
+  // No discovered routes at all → the caller has nothing to validate against.
+  if (served.length === 0) return conflicts
+
+  for (const interceptor of interceptors) {
+    const target = normalizeServedRoutePath(interceptor.targetRoute ?? '')
+    if (!target) continue
+    if (target === '*') continue
+    if (served.some((routePath) => interceptorTargetMatches(target, routePath))) continue
+    conflicts.push({
+      severity: 'warning',
+      type: 'unmatched-interceptor-target',
+      message: `Interceptor "${interceptor.id}" in module "${interceptor.moduleId}" targets route "${interceptor.targetRoute}", which is not served by any enabled module — it will never execute. Check for a typo, a disabled module, or a missing leading path segment.`,
+      moduleIds: [interceptor.moduleId],
+      target: interceptor.targetRoute,
+      details: { interceptorId: interceptor.id, targetRoute: interceptor.targetRoute },
+    })
+  }
+
+  return conflicts
 }
 
 export function detectComponentOverrideConflicts(
@@ -202,6 +263,11 @@ export function detectConflicts(input: ConflictDetectionInput): UmesConflictResu
 
   if (input.interceptors) {
     allConflicts.push(...detectInterceptorConflicts(input.interceptors))
+    if (input.servedApiRoutePaths) {
+      allConflicts.push(
+        ...detectUnmatchedInterceptorTargets(input.interceptors, input.servedApiRoutePaths),
+      )
+    }
   }
 
   if (input.injectionTables) {

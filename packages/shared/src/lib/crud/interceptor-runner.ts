@@ -106,8 +106,15 @@ export async function runApiInterceptorsBefore(args: {
 
       const normalized: InterceptorBeforeResult = result ?? { ok: true }
       if (!normalized.ok) {
-        const rejectBody: Record<string, unknown> = {
-          error: normalized.message ?? 'Request blocked by API interceptor',
+        // Preserve interceptor-provided structured error detail (DARAA-100 problem 2).
+        // Previously the block collapsed to `{ error }` and dropped every other key,
+        // so an interceptor could never emit a structured contract (e.g. `fields: [...]`)
+        // or an i18n-resolved payload. `error` still falls back to `message` then the
+        // generic constant, so `{ ok: false, message }` interceptors are unchanged.
+        const providedBody = sanitizeObject(normalized.errorBody) ?? {}
+        const rejectBody: Record<string, unknown> = { ...providedBody }
+        if (rejectBody.error === undefined) {
+          rejectBody.error = normalized.message ?? 'Request blocked by API interceptor'
         }
         if (process.env.NODE_ENV !== 'production') {
           rejectBody.interceptorId = interceptor.id
