@@ -273,6 +273,35 @@ AI tool "<name>" requiredFeatures do not cover route <METHOD> <path> requiredFea
 Fix it by adding the route's feature(s) to the tool — **never** by weakening the route.
 :::
 
+## Local browser debug tool (`browser_debug`)
+
+The `@app` `browser_debug` module gives agents a way to **see** the app they
+are working on by driving a real local Chrome/Edge over CDP
+(`--remote-debugging-port`) using the Playwright already vendored in
+`node_modules`. It is surfaced two ways:
+
+- **In-app tools** — `browser_debug.*` (`open`/`navigate`, `screenshot`,
+  `read_dom`, `read_console`, `click`, `back`) registered via the AI toolset
+  and the in-app `mcp:list-tools`.
+- **Standalone stdio MCP server** for external clients / coding CLIs:
+
+  ```bash
+  OM_ENABLE_AGENT_BROWSER_DEBUG=1 mercato browser_debug mcp:serve-browser
+  ```
+
+### Fail-closed security
+
+- The whole capability is **off unless** `OM_ENABLE_AGENT_BROWSER_DEBUG=1`.
+  With the flag unset no `browser_debug.*` tools are registered and the MCP
+  server refuses to start. Keep it unset in production.
+- **Loopback-only** targets: `localhost`, `127.0.0.1`, `::1`. Non-loopback
+  hosts and non-http(s) schemes (`file:` etc.) are refused.
+- ACL `browser_debug.debug` is granted to `superadmin` + `admin` only.
+- Tool calls read/write no tenant data — purely local browser introspection.
+
+See `apps/mercato/src/modules/browser_debug/README.md` for the full verb table
+and configuration variables.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
