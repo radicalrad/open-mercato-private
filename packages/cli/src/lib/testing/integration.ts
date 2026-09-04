@@ -3249,7 +3249,13 @@ export async function startEphemeralEnvironment(options: EphemeralRuntimeOptions
         `[${options.logPrefix}] Existing ephemeral environment could not be reused. Starting a fresh instance on isolated port ${applicationPort}.`,
       )
     }
-    const applicationBaseUrl = `http://127.0.0.1:${applicationPort}`
+    // Use `localhost`, not `127.0.0.1`: under NODE_ENV=production the login
+    // route sets the `auth_token` cookie with `Secure`, and Chromium only
+    // treats `localhost` (not the literal loopback IP) as a trustworthy origin
+    // over plain HTTP. With a 127.0.0.1 base URL, browser contexts in the
+    // integration suite store no session cookie, so every page.request API
+    // call after an in-browser login comes back 401 (AUT-346).
+    const applicationBaseUrl = `http://localhost:${applicationPort}`
     const databaseName = 'mercato_test'
     const databaseUser = 'mercato'
     const databasePassword = 'secret'
