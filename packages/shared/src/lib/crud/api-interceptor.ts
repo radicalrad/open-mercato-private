@@ -37,6 +37,19 @@ export type InterceptorBeforeResult = {
   message?: string
   statusCode?: number
   metadata?: Record<string, unknown>
+  /**
+   * Structured error payload for a blocked (`ok: false`) result.
+   *
+   * Historically a block collapsed to `{ error: message }` and every other key an
+   * interceptor produced was discarded, so an interceptor could never emit a
+   * structured error contract (e.g. a `fields: [...]` validation array) or an
+   * i18n-resolved payload. Keys supplied here are merged into the rejection body.
+   *
+   * `error` defaults to `message` (then a generic constant) when `errorBody` does
+   * not provide one, so existing `{ ok: false, message }` interceptors are
+   * unaffected. Ignored when `ok` is `true`.
+   */
+  errorBody?: Record<string, unknown>
 }
 
 export type InterceptorAfterResult = {

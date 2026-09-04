@@ -66,6 +66,7 @@ import { applyResponseEnrichers, applyResponseEnricherToRecord, resolveListCache
 import type { EnricherContext } from './response-enricher'
 import type { ApiInterceptorMethod, InterceptorRequest, InterceptorResponse } from './api-interceptor'
 import { runApiInterceptorsAfter, runApiInterceptorsBefore } from './interceptor-runner'
+import { markHandlerRunsApiInterceptors } from './dispatcher-interceptors'
 import { mergeIdFilter, parseIdsParam } from './ids'
 import { mergeAdvancedFilters } from './advanced-filter-integration'
 import { parseExtensionHeaders } from '../umes/extension-headers'
@@ -2913,5 +2914,14 @@ export function makeCrudRoute<TCreate = any, TUpdate = any, TList = any>(opts: C
     }
   }
 
-  return { metadata, GET, POST, PUT, DELETE }
+  // Mark the handlers as self-managed so the app dispatcher does not run the API
+  // interceptor chain a second time around them (DARAA-100). The factory already
+  // invokes `runApiInterceptorsBefore`/`After` internally.
+  return {
+    metadata,
+    GET: markHandlerRunsApiInterceptors(GET),
+    POST: markHandlerRunsApiInterceptors(POST),
+    PUT: markHandlerRunsApiInterceptors(PUT),
+    DELETE: markHandlerRunsApiInterceptors(DELETE),
+  }
 }
